@@ -1,0 +1,16 @@
+[project]
+name = "labor-law-agent"
+version = "0.1.0"
+description = "Trợ lý Luật Lao động VN: agentic RAG với LangGraph"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.9",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["learning"]
