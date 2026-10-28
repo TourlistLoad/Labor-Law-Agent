@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Trợ lý Luật Lao động VN: agentic RAG với LangGraph"
 requires-python = ">=3.12"
 dependencies = [
+    "httpx>=0.28.1",
     "pydantic>=2.9",
 ]
 

@@ -1,0 +1,53 @@
+## Questions:
+
+1. run_concurrent nhanh hơn dù chỉ có 1 thread. Vì sao? Khi nào async không giúp gì?
+2. Một endpoint FastAPI async def gọi LLM bằng requests.post(...). 100 người dùng vào cùng lúc thì chuyện gì xảy ra?
+3. Vì sao phải gửi lại toàn bộ history mỗi lần gọi? Dùng số prompt_tokens từ chế độ history: ở lượt thứ 20, chi phí mỗi lượt sẽ thay đổi thế nào?
+4. Vì sao retry 429 và 503 nhưng không retry 400 và 403? Retry một tool "gửi email cho HR" có an toàn không?
+5. Trong lần chạy speed, token suy nghĩ chiếm bao nhiêu phần trăm token output? Nếu đổi thinking_level từ low sang high, bạn đoán độ trễ và chi phí đổi ra sao? (Muốn thì sửa SETTINGS và chạy thử.)
+6. Vì sao đặt API key trong header chứ không đặt trên URL?
+
+## Answer:
+
+1. nhanh hơn vì các task cùng chạy không cần phải đợi task khác xong. 
+2. nó sẽ chạy tuần tự 100 lần
+3. vì mỗi lần gọi là 1 lần riêng biệt nên cần gửi lại history để làm context. ở lượt 20 chi phí sẽ tính cả 19 lần trước đó vì gửi lại history
+4. 429 và 503 là lỗi phía server, còn lỗi 400 và 403 là lỗi của mình. tôi nghĩ là không
+5. 
+
+Model: gemini-3.5-flash-lite   thinking: low
+TUẦN TỰ  (tổng thời gian thực: 94.66s)
+ #   giây     finish  prompt  output  think  trả lời
+ 1  12.62       STOP      53      61      0  Thời gian thử việc tối đa đối với công việc cần trình độ ch…
+ 2  32.44       STOP      51     185      0  Theo Điều 35 Bộ luật Lao động 2013 (sửa đổi), người lao độn…
+ 3  19.66       STOP      55      65      0  Làm thêm giờ vào ngày nghỉ hằng tuần được trả ít nhất bằng …
+ 4  29.94       STOP      47      88      0  Lao động nữ sinh con được nghỉ chế độ thai sản tổng cộng 06…
+Ước tính nếu trả phí: $0.001651  (≈ 43 VND, tỉ giá giả định 26.000)
+
+ĐỒNG THỜI, tối đa 3 cùng lúc  (tổng thời gian thực: 43.88s)
+ #   giây     finish  prompt  output  think  trả lời
+ 1  43.88       STOP      53      67      0  Thời gian thử việc tối đa đối với công việc có chức danh ng…
+ 2  37.66       STOP      51     112      0  Người lao động hoàn toàn có quyền đơn phương chấm dứt hợp đ…
+ 3  29.96       STOP      55      68      0  Làm thêm giờ vào ngày nghỉ hằng tuần được trả ít nhất bằng …
+ 4   9.18       STOP      47      89      0  Lao động nữ sinh con được nghỉ chế độ thai sản tổng cộng 06…
+Ước tính nếu trả phí: $0.001414  (≈ 37 VND, tỉ giá giả định 26.000)
+
+Model: gemini-3.5-flash-lite   thinking: high
+
+TUẦN TỰ  (tổng thời gian thực: 68.92s)
+ #   giây     finish  prompt  output  think  trả lời
+ 1  19.46       STOP      53      57    774  Thời gian thử việc tối đa đối với công việc cần trình độ ch…
+ 2  17.37       STOP      51      89    628  Người lao động được quyền đơn phương chấm dứt hợp đồng lao …
+ 3  19.18       STOP      55      68    433  Người lao động làm thêm giờ vào ngày nghỉ hằng tuần được tr…
+ 4  12.91       STOP      47      82    694  Theo Bộ luật Lao động, lao động nữ sinh con được nghỉ thai …
+Ước tính nếu trả phí: $0.010748  (≈ 279 VND, tỉ giá giả định 26.000)
+
+ĐỒNG THỜI, tối đa 3 cùng lúc  (tổng thời gian thực: 30.87s)
+ #   giây     finish  prompt  output  think  trả lời
+ 1  24.95       STOP      53      59    506  Thời gian thử việc tối đa đối với công việc cần trình độ ch…
+ 2  16.83       STOP      51      91    664  Người lao động thông thường phải tuân thủ thời hạn báo trướ…
+ 3  28.31       STOP      55      65    453  Người lao động làm thêm giờ vào ngày nghỉ hằng tuần được tr…
+ 4  14.03       STOP      47      73    714  Lao động nữ sinh con được nghỉ hưởng chế độ thai sản tổng c…
+Ước tính nếu trả phí: $0.009998  (≈ 260 VND, tỉ giá giả định 26.000)
+
+6. vì nếu được API key trong URL, URL có thể ghi log nên có thể sẽ bị lộ key
