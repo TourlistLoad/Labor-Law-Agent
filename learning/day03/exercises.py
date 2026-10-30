@@ -293,13 +293,41 @@ def parse_model_turn(data: dict) -> ModelTurn:
 #   Một part cho mỗi call, ĐÚNG thứ tự calls. (Gợi ý: zip(calls, results))
 
 def execute_call(call: FunctionCall, registry: dict[str, ToolSpec]) -> dict:
-    # TODO
-    raise NotImplementedError
+    if call.name not in registry:
+        return {"error": f"Không có tool tên {call.name}."}
+    spec = registry.get(call.name)
+    try:
+        inp = spec.input_model.model_validate(call.args)
+    except ValidationError as e:
+        return {
+            "error": "Tham số không hợp lệ, hãy sửa và gọi lại.",
+            "details": validation_messages(e)
+        }
+
+    try:
+        return spec.func(inp).model_dump()
+    except Exception as e:
+        return {"error": f"Tool gặp lỗi khi chạy: {e}"}
+
 
 
 def function_response_turn(calls: list[FunctionCall], results: list[dict]) -> dict:
-    # TODO
-    raise NotImplementedError
+    func_responses = {
+        "role": "user",
+        "parts": []
+    }
+    for call, result in zip(calls, results):
+        func_resp = {
+            "functionResponse": {
+                "name": call.name,
+                "response": result,
+            }
+        }
+        if call.id is not None:
+            func_resp["functionResponse"]["id"] = call.id
+        func_responses["parts"].append(func_resp)
+
+    return func_responses
 
 
 # ===========================================================================
@@ -327,8 +355,18 @@ async def extract_with_retry(
     llm: LLM,
     max_attempts: int = 3,
 ) -> ExtractionResult:
-    # TODO
-    raise NotImplementedError
+    contents = [user_turn(text=text)]
+    for attempt in range(1, max_attempts + 1):
+        data = await llm(build_extraction_request(contents=contents, model_cls=model_cls))
+        turn = parse_model_turn(data=data)
+        try:
+            value = model_cls.model_validate_json(turn.text)
+            return ExtractionResult(value=value, attempts=attempt)
+        except ValidationError as e:
+            errors = validation_messages(e=e)
+            contents = contents + [turn.content, retry_message(errors=errors)]
+
+    raise ExtractionError(errors)
 
 
 # ===========================================================================
@@ -354,5 +392,17 @@ async def run_agent(
     system: str | None = None,
     max_steps: int = 5,
 ) -> AgentResult:
-    # TODO
-    raise NotImplementedError
+    contents = [user_turn(question)]
+    trace = []
+    for step in range(1, max_steps + 1):
+        data = await llm(build_agent_request(contents=contents, tools=list(registry.values()), system=system))
+        turn = parse_model_turn(data=data)
+        if not turn.calls:
+            return AgentResult(answer=turn.text, steps=step, trace=trace)
+
+        results = [execute_call(call=c, registry=registry) for c in turn.calls]
+        for (call, result) in zip(turn.calls, results):
+            trace.append(ToolTrace(name=call.name, args=call.args, result=result))
+        contents = contents + [turn.content, function_response_turn(calls=turn.calls, results=results)]
+
+    raise AgentStepLimitError()
